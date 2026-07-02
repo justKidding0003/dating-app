@@ -1,0 +1,25 @@
+# Java
+target/
+*.class
+*.log
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Flutter
+.dart_tool/
+build/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
