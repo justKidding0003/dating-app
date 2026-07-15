@@ -1,0 +1,45 @@
+sequenceDiagram
+    actor Client
+    participant AuthController
+    participant AuthenticationService
+    participant OtpChallengeService
+    participant PhoneNumberNormalizer
+    participant PhoneLookupHasher
+    participant OtpGenerator
+    participant OtpProtector
+    participant OtpChallengeRepository
+    participant LocalDevelopmentOtpDeliveryProvider
+    participant IdentityResolutionService
+    participant TokenOrchestrationService
+
+    Client->>AuthController: POST /api/v1/auth/otp/request
+    AuthController->>AuthenticationService: requestOtp(phoneNumber, regionCode)
+    AuthenticationService->>OtpChallengeService: requestChallenge(...)
+    OtpChallengeService->>PhoneNumberNormalizer: normalizeToE164(...)
+    PhoneNumberNormalizer-->>OtpChallengeService: normalized E.164 phone
+    OtpChallengeService->>PhoneLookupHasher: hash(normalizedPhone)
+    PhoneLookupHasher-->>OtpChallengeService: phoneLookupHash
+    OtpChallengeService->>OtpGenerator: generate(length)
+    OtpGenerator-->>OtpChallengeService: otp
+    OtpChallengeService->>OtpProtector: protect(challengeId, otp)
+    OtpProtector-->>OtpChallengeService: otpHmac
+    OtpChallengeService->>OtpChallengeRepository: save pending challenge
+    OtpChallengeService->>LocalDevelopmentOtpDeliveryProvider: deliver(normalizedPhone, otp)
+    OtpChallengeService-->>AuthenticationService: challenge metadata
+    AuthenticationService-->>AuthController: challenge result
+    AuthController-->>Client: 202 Accepted
+
+    Client->>AuthController: POST /api/v1/auth/otp/verify
+    AuthController->>AuthenticationService: verifyOtpAndIssueTokens(...)
+    AuthenticationService->>OtpChallengeService: verifyChallenge(challengeId, otp)
+    OtpChallengeService->>OtpChallengeRepository: findByChallengeIdForUpdate(...)
+    OtpChallengeService->>OtpProtector: matches(challengeId, submittedOtp, otpHmac)
+    OtpProtector-->>OtpChallengeService: valid / invalid
+    OtpChallengeService->>OtpChallengeRepository: mark consumed
+    OtpChallengeService-->>AuthenticationService: phoneLookupHash
+    AuthenticationService->>IdentityResolutionService: getOrCreateAfterSuccessfulAuthentication(hash)
+    IdentityResolutionService-->>AuthenticationService: Identity
+    AuthenticationService->>TokenOrchestrationService: issueAfterSuccessfulAuthentication(identityId, device)
+    TokenOrchestrationService-->>AuthenticationService: accessToken + refreshToken
+    AuthenticationService-->>AuthController: token result
+    AuthController-->>Client: token response

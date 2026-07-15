@@ -1,0 +1,539 @@
+Identity Service / Authentication Service Implementation Plan
+============================================================
+
+Status
+------
+
+This document captures the first-response assessment and implementation plan for
+creating the V1 Identity Service / Authentication Service.
+
+No code changes have been implemented yet.
+
+
+1. Current Repository Assessment
+--------------------------------
+
+Current branch:
+
+- feature/authentication
+
+The repository is a small but real Spring Boot backend skeleton, not an empty
+repository.
+
+Existing structure:
+
+Dating-App/
+  .agents/
+  .github/copilot-instructions.md
+  architecture/
+  backend/
+    pom.xml
+    mvnw
+    mvnw.cmd
+    src/main/java/com/kshiteesh/datingapp/Application.java
+    src/main/resources/application.properties
+    src/main/resources/db/migration/V1__initial_schema.sql
+    src/test/java/com/kshiteesh/datingapp/ApplicationTests.java
+  database/
+  docker/
+  docs/
+  mobile/
+  AGENTS.md
+  PROJECT_VISION.md
+  ARCHITECTURE_RULES.md
+  CODING_STANDARDS.md
+  DECISION_LOG.md
+  docker-compose.yml
+
+What exists already:
+
+- Spring Boot 3.5.16 backend.
+- Java 21 configured.
+- Maven wrapper.
+- Spring Web, Security, Validation, Data JPA.
+- Flyway and PostgreSQL driver already included.
+- Empty V1__initial_schema.sql.
+- Basic Spring Boot Application.java.
+- Basic context-load test.
+- PostgreSQL Docker Compose service.
+- spring.jpa.hibernate.ddl-auto=validate, which aligns with Flyway-only schema
+  management.
+
+Reusable pieces:
+
+- Existing backend module can become the first microservice.
+- Existing package root com.kshiteesh.datingapp.
+- Existing Flyway setup.
+- Existing PostgreSQL, JPA, Security, and Validation dependencies.
+- Existing Docker Compose can be adjusted for identity local development.
+- Existing documentation clearly defines Identity/Auth scope.
+
+Must change:
+
+- Rename service identity from generic dating-app-backend to identity-service.
+- Replace skeleton with package-by-feature Identity Service implementation.
+- Add auth APIs, DTOs, domain services, repositories, entities, security config,
+  JWT issuing, refresh sessions, and OTP lifecycle.
+- Fill or add Flyway migration with Identity-owned tables only.
+- Replace hardcoded DB credentials/config defaults with environment-friendly
+  config.
+- Add local/test/production configuration profiles.
+- Add global exception handling and common error response format.
+- Add request/correlation ID support.
+
+Important current issue:
+
+- application.properties uses postgres/postgres, while docker-compose.yml creates
+  dating_user/dating_password. That is a concrete config mismatch.
+
+Dirty worktree note:
+
+- Existing modified/untracked docs are present. Unrelated user changes must not be
+  touched or reverted.
+
+
+2. Proposed Target Folder Structure
+-----------------------------------
+
+Inside backend/src/main/java/com/kshiteesh/datingapp:
+
+identity/
+  auth/
+    controller/
+    dto/
+    service/
+    exception/
+  otp/
+    entity/
+    repository/
+    service/
+    delivery/
+    dto/
+  identity/
+    entity/
+    repository/
+    service/
+  session/
+    entity/
+    repository/
+    service/
+  token/
+    service/
+    dto/
+  phone/
+    service/
+  rateLimit/
+    service/
+  config/
+  security/
+  web/
+    exception/
+    filter/
+
+Tests:
+
+backend/src/test/java/com/kshiteesh/datingapp/
+  identity/
+    auth/
+    otp/
+    session/
+    token/
+
+
+3. Files To Create
+------------------
+
+Likely create:
+
+- backend/src/main/java/com/kshiteesh/datingapp/identity/config/IdentityProperties.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/config/SecurityConfig.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/config/PasswordEncoderConfig.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/controller/AuthController.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/OtpRequestDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/OtpRequestResponseDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/OtpVerifyRequestDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/AuthTokenResponseDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/RefreshTokenRequestDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/auth/dto/LogoutRequestDto.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/identity/entity/Identity.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/identity/repository/IdentityRepository.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/identity/service/IdentityService.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/entity/OtpChallenge.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/entity/OtpChallengeStatus.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/repository/OtpChallengeRepository.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/service/OtpChallengeService.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/service/OtpGenerator.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/delivery/OtpDeliveryProvider.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/delivery/DevelopmentOtpDeliveryProvider.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/otp/delivery/NoopProductionOtpDeliveryProvider.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/session/entity/RefreshSession.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/session/entity/RefreshSessionStatus.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/session/repository/RefreshSessionRepository.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/session/service/RefreshSessionService.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/token/service/JwtTokenService.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/token/service/RefreshTokenGenerator.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/phone/service/PhoneNumberNormalizer.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/rateLimit/service/InMemoryRateLimitService.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/web/exception/ApiErrorResponse.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/web/exception/GlobalExceptionHandler.java
+- backend/src/main/java/com/kshiteesh/datingapp/identity/web/filter/CorrelationIdFilter.java
+- backend/src/main/resources/application-local.properties
+- backend/src/main/resources/application-test.properties
+- backend/src/main/resources/application-prod.properties
+- backend/src/main/resources/db/migration/V2__identity_service_schema.sql
+
+Tests to create:
+
+- OtpChallengeServiceTest.java
+- AuthServiceTest.java
+- RefreshSessionServiceTest.java
+- JwtTokenServiceTest.java
+- AuthControllerIntegrationTest.java
+
+
+4. Files To Modify
+------------------
+
+- backend/pom.xml
+- backend/src/main/resources/application.properties
+- backend/src/main/resources/db/migration/V1__initial_schema.sql
+- backend/src/main/java/com/kshiteesh/datingapp/Application.java
+- backend/src/test/java/com/kshiteesh/datingapp/ApplicationTests.java
+- docker-compose.yml
+
+Possible migration choice:
+
+- Keep V1__initial_schema.sql empty and add V2__identity_service_schema.sql, or
+  fill V1 if this database has never been migrated.
+- Safer production-grade approach: add V2__identity_service_schema.sql to avoid
+  changing migration history.
+
+
+5. Proposed API Contracts
+-------------------------
+
+Base path:
+
+/api/v1/auth
+
+POST /api/v1/auth/otp/request
+
+Request:
+
+{
+  "phoneNumber": "+919876543210",
+  "countryCode": "IN"
+}
+
+Response: 202 Accepted
+
+{
+  "challengeId": "uuid",
+  "expiresAt": "2026-07-05T12:00:00Z",
+  "resendAvailableAt": "2026-07-05T11:59:00Z"
+}
+
+Validation:
+
+- phoneNumber is required.
+- E.164 accepted directly.
+- Otherwise normalize using countryCode.
+- countryCode must be ISO-3166 alpha-2 when needed.
+- Never reveal account existence.
+
+POST /api/v1/auth/otp/verify
+
+Request:
+
+{
+  "challengeId": "uuid",
+  "otp": "123456",
+  "deviceName": "Pixel 8",
+  "deviceId": "optional-client-device-id"
+}
+
+Response: 200 OK
+
+{
+  "accessToken": "jwt",
+  "refreshToken": "opaque-token",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "identityId": "uuid"
+}
+
+Validation:
+
+- challengeId is required and must be a UUID.
+- otp is required, numeric, and must match configured length.
+- Device metadata is optional and length-bounded.
+
+POST /api/v1/auth/token/refresh
+
+Request:
+
+{
+  "refreshToken": "opaque-token"
+}
+
+Response: 200 OK
+
+{
+  "accessToken": "jwt",
+  "refreshToken": "new-opaque-token",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "identityId": "uuid"
+}
+
+Behavior:
+
+- Rotates refresh token.
+- Revokes old session token.
+- Detects reuse where possible and revokes token family/session.
+
+POST /api/v1/auth/logout
+
+Request:
+
+{
+  "refreshToken": "opaque-token"
+}
+
+Response:
+
+204 No Content
+
+Common error format:
+
+{
+  "code": "OTP_INVALID",
+  "message": "The OTP could not be verified.",
+  "details": {},
+  "requestId": "uuid",
+  "timestamp": "2026-07-05T00:00:00Z"
+}
+
+Likely status codes:
+
+- 400 Bad Request: validation, invalid phone, invalid OTP format.
+- 401 Unauthorized: invalid access token or refresh token.
+- 403 Forbidden: disabled identity.
+- 409 Conflict: consumed challenge or rotated-token reuse if exposed generically.
+- 422 Unprocessable Entity: expired or invalid challenge.
+- 429 Too Many Requests: OTP request/resend/verification throttled.
+- 503 Service Unavailable: OTP delivery provider unavailable.
+
+
+6. Proposed Database Model
+--------------------------
+
+identities:
+
+- id uuid primary key
+- phone_number_hash varchar(128) not null unique
+- phone_number_encrypted text null/optional for V1 if encryption key configured
+- status varchar(32) not null
+- created_at timestamptz not null
+- updated_at timestamptz not null
+
+otp_challenges:
+
+- id uuid primary key
+- identity_id uuid null references identities(id)
+- phone_number_hash varchar(128) not null
+- otp_hash varchar(255) not null
+- status varchar(32) not null
+- expires_at timestamptz not null
+- resend_available_at timestamptz not null
+- attempt_count int not null
+- max_attempts int not null
+- created_at timestamptz not null
+- verified_at timestamptz null
+- consumed_at timestamptz null
+
+Indexes:
+
+- idx_otp_challenges_phone_status_created_at
+- idx_otp_challenges_expires_at
+
+refresh_sessions:
+
+- id uuid primary key
+- identity_id uuid not null references identities(id)
+- refresh_token_hash varchar(255) not null unique
+- previous_token_hash varchar(255) null
+- status varchar(32) not null
+- expires_at timestamptz not null
+- revoked_at timestamptz null
+- rotated_at timestamptz null
+- reuse_detected_at timestamptz null
+- device_id varchar(128) null
+- device_name varchar(128) null
+- created_at timestamptz not null
+- updated_at timestamptz not null
+
+Indexes:
+
+- idx_refresh_sessions_identity_status
+- idx_refresh_sessions_expires_at
+
+No tables should be created for profile, contacts, private list, graph, matching,
+chat, reveal, or reputation.
+
+
+7. Security Decisions
+---------------------
+
+- OTP generated with SecureRandom.
+- OTP stored only as BCrypt/Argon2-style secure hash, never raw.
+- Refresh token generated as high-entropy opaque random value.
+- Refresh token stored only as secure hash.
+- Access token is JWT, short-lived, with no phone number or sensitive PII in
+  claims.
+- JWT claims should be minimal: sub as identityId, iss, iat, exp, and minimal
+  roles/scope if needed.
+- JWT secret/signing key comes only from configuration or environment variables.
+- Phone lookup uses deterministic HMAC hash of normalized E.164 phone number with
+  environment-provided pepper.
+- Full phone number must not be logged.
+- Development OTP provider is active only under local/dev profile.
+- Development provider may log OTP only in controlled local logs, never API
+  responses and never production.
+- Production profile must fail startup unless secure JWT and phone hash secrets
+  are configured.
+- Service-level rate limiting is implemented in-memory for V1 foundation.
+- Gateway rate limiting remains required later.
+- All timestamps are stored in UTC.
+- Correlation/request IDs are propagated in logs and error responses.
+
+
+8. Dependencies To Add
+----------------------
+
+Already present:
+
+- Spring Web
+- Spring Security
+- Validation
+- Spring Data JPA
+- Flyway
+- PostgreSQL
+- Spring Boot Test
+- Spring Security Test
+
+Proposed additions:
+
+- com.googlecode.libphonenumber:libphonenumber
+- org.springframework.boot:spring-boot-starter-actuator
+- org.springframework.boot:spring-boot-configuration-processor
+- com.nimbusds:nimbus-jose-jwt or io.jsonwebtoken:jjwt-api/runtime/impl
+
+Potentially defer:
+
+- org.testcontainers:postgresql
+- org.testcontainers:junit-jupiter
+
+Testcontainers trade-off:
+
+- Add now: strongest confidence against real PostgreSQL/Flyway behavior.
+- Defer now: faster first implementation and fewer Docker-dependent test failures.
+- Recommendation: add Testcontainers if Docker is expected in CI/local. Otherwise
+  use focused unit tests now and add Testcontainers when CI is established.
+
+
+9. Testing Plan
+---------------
+
+Unit tests:
+
+- OTP generation length, numeric format, and secure randomness boundaries.
+- OTP request creates challenge with hashed OTP.
+- OTP request respects resend/request rate limits.
+- Valid OTP consumes challenge and issues tokens.
+- Invalid OTP increments attempts.
+- Expired OTP is rejected.
+- Max attempt limit locks challenge.
+- Consumed OTP cannot be reused.
+- Phone normalization returns stable E.164.
+- Refresh token rotation revokes/replaces previous token.
+- Reuse of rotated/revoked refresh token is detected.
+- Logout revokes refresh session.
+- JWT contains only approved minimal claims.
+
+Integration tests:
+
+- Controller validation and status codes.
+- Security allows auth endpoints and protects authenticated endpoints.
+- Flyway migration applies.
+- JPA mappings validate against schema.
+- Global error response shape includes request ID and timestamp.
+
+
+10. Risks And Open Questions
+----------------------------
+
+Conflicts or documentation tension:
+
+- The task requires refresh token lifecycle in V1, while Feature_Specification.md
+  lists refresh token rotation under future enhancements. Proposed resolution:
+  follow the task and implement refresh tokens now because the requested endpoints
+  explicitly include refresh.
+- Documentation says Gateway owns JWT validation and rate limiting, but the task
+  also requires service-layer rate limiting. Proposed resolution: implement
+  service-level baseline now and keep Gateway rate limiting as an architecture
+  requirement.
+- Feature_Specification.md includes GET /api/v1/auth/me and internal identity
+  lookup, but the task minimum endpoints do not. Proposed resolution: defer those
+  unless explicitly requested for this first implementation.
+- Feature_Specification.md OTP verify response mentions userId and profileStatus;
+  this service must not own profile. Proposed resolution: return identityId only,
+  or return profileStatus as UNKNOWN/PROFILE_REQUIRED only if explicitly approved.
+- Current DB config conflicts with Docker Compose credentials.
+- Production phone-number encryption needs a key-management decision. For V1,
+  deterministic HMAC hash is required for lookup; encrypted storage can be
+  implemented with an environment key or deferred if not needed by any V1 API.
+- Local dev OTP visibility must be useful but not leak through API responses.
+  Proposed resolution: log only under local profile with masked phone and
+  challenge ID.
+
+Open questions:
+
+- Should the first implementation include GET /api/v1/auth/me?
+- Should verify response use identityId or keep docs-compatible userId naming?
+- Should Testcontainers be added now?
+- Should the Maven artifact be renamed to identity-service in this change?
+
+
+11. Exact Implementation Sequence
+---------------------------------
+
+1. Confirm approval and resolve the open questions above.
+2. Update Maven metadata and dependencies.
+3. Convert application config to identity-service with environment-backed values
+   and profiles.
+4. Add configuration properties classes.
+5. Add Flyway migration for identities, otp_challenges, and refresh_sessions.
+6. Add entities and repositories.
+7. Add phone normalization and phone hash service.
+8. Add OTP generator, OTP hashing, challenge lifecycle service, and delivery
+   provider abstraction.
+9. Add local-only development OTP delivery provider.
+10. Add identity resolution/create service.
+11. Add JWT access token service.
+12. Add opaque refresh token/session service with rotation and revocation.
+13. Add auth application service orchestrating request, verify, refresh, and
+    logout.
+14. Add DTOs and AuthController.
+15. Add Spring Security config.
+16. Add global exception handler and common error response.
+17. Add request/correlation ID filter and actuator health.
+18. Add unit tests for OTP/session/token/business rules.
+19. Add integration tests for controller/security/persistence as agreed.
+20. Run Maven tests and report results.
+
+
+Approval Gate
+-------------
+
+Implementation should not begin until the plan is approved.

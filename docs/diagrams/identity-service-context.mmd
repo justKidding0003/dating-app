@@ -1,0 +1,10 @@
+flowchart LR
+    Client["Mobile / API Client"]
+    IdentityService["Identity Service<br/>Spring Boot 3 / Java 21"]
+    DB[("PostgreSQL<br/>identity, otp_challenge, refresh_session")]
+    LocalOtp["Local OTP Delivery<br/>local profile only"]
+
+    Client -->|"POST /api/v1/auth/*"| IdentityService
+    IdentityService -->|"JPA repositories<br/>Flyway migrations"| DB
+    IdentityService -->|"OtpDeliveryProvider.deliver()"| LocalOtp
+    IdentityService -->|"challenge metadata<br/>access token<br/>refresh token"| Client

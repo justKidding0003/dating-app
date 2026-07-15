@@ -38,7 +38,7 @@ Version 1 uses a microservices architecture with Spring Boot 3, Java 21, Postgre
 - Social Graph Service is the only service allowed to import external connections.
 - Matching depends only on mutual Private List inclusion.
 - Matching must not consider user activity, paid status, engagement, popularity, or Fair Play score.
-- Anonymous identity must remain protected until a successful mutual reveal.
+- Anonymous identity must remain protected until the automatic reveal deadline is reached.
 
 ### 2.2 Core Product Rules
 
@@ -48,7 +48,8 @@ Version 1 uses a microservices architecture with Spring Boot 3, Java 21, Postgre
 - Matching is processed in batches.
 - Match notifications are delayed by a randomized interval.
 - Anonymous chat starts only after a mutual match exists.
-- Reveal requires consent from both matched users.
+- Reveal timing is selected independently by both matched users at the beginning of the anonymous chat lifecycle.
+- The system calculates an immutable reveal schedule from both selections and reveals identity automatically at the deadline.
 - No feature may allow a user to infer another user's identity before reveal.
 
 ## 3. Shared API Standards
@@ -253,7 +254,7 @@ Enable users to present enough information for post-reveal recognition while pre
 
 ## 5.3 User Story
 
-As a verified user, I want to create and manage my profile so that people can recognize me after mutual reveal while my identity remains hidden before reveal.
+As a verified user, I want to create and manage my profile so that people can recognize me after automatic reveal while my identity remains hidden before reveal.
 
 ## 5.4 Functional Requirements
 
@@ -278,7 +279,7 @@ As a verified user, I want to create and manage my profile so that people can re
 ## 5.6 Business Rules
 
 - A user cannot create or save a Private List until mandatory profile setup is complete.
-- Profile identity is hidden from matched users until reveal is mutually accepted.
+- Profile identity is hidden from matched users until Reveal Service confirms the automatic reveal has occurred.
 - User Service owns profile data; other services must request profile summaries through APIs.
 - Deactivated users must not be eligible for new matches.
 - Existing anonymous chats involving a deactivated user must be blocked or marked unavailable.
@@ -306,7 +307,7 @@ Public endpoints:
   - Updates profile fields.
 - `GET /api/v1/users/{userId}/revealed-profile`
   - Authenticated.
-  - Returns profile only if Reveal Service confirms mutual reveal.
+  - Returns profile only if Reveal Service confirms automatic reveal completion.
 - `POST /api/v1/users/me/deactivate`
   - Authenticated.
   - Soft deactivates account.
@@ -349,7 +350,7 @@ User DB must include:
 - User authenticates but exits before profile completion.
 - User deletes or deactivates account while in another user's Private List.
 - User changes display name after reveal.
-- User updates profile while reveal request is pending.
+- User updates profile while reveal schedule is pending or finalized.
 - Profile photo processing succeeds after profile update response.
 
 ## 5.13 Security Considerations
@@ -373,7 +374,7 @@ User DB must include:
 - A verified user can create, view, and update their own profile.
 - A user cannot complete onboarding without mandatory profile fields.
 - Anonymous chat and match APIs do not expose profile identity fields.
-- Revealed profile data is returned only after mutual reveal.
+- Revealed profile data is returned only after automatic reveal completion.
 - Deactivated users are excluded from new match eligibility.
 
 ---
@@ -828,15 +829,16 @@ Anonymous Chat allows matched users to communicate without revealing names, prof
 
 ## 9.2 Business Goal
 
-Enable meaningful conversation after mutual interest while preserving privacy until both users consent to reveal.
+Enable meaningful conversation after mutual interest while preserving privacy until the scheduled automatic reveal deadline.
 
 ## 9.3 User Story
 
-As a matched user, I want to chat anonymously with my mutual match so that we can decide whether to reveal identities without risking social embarrassment.
+As a matched user, I want to chat anonymously with my mutual match for a predictable scheduled period so that identity reveal is fair, private, and not dependent on later pressure.
 
 ## 9.4 Functional Requirements
 
 - The service must create or activate a chat thread for each active match.
+- The first entry into a newly created anonymous chat must require each participant to complete the - - - Reveal Service duration-selection modal before normal chat use.
 - The service must support real-time messaging over WebSocket.
 - The service must support message history retrieval over REST.
 - Participants must be represented by anonymous aliases before reveal.
@@ -857,7 +859,8 @@ As a matched user, I want to chat anonymously with my mutual match so that we ca
 ## 9.6 Business Rules
 
 - Chat is available only for active anonymous matches.
-- Identity remains hidden until Reveal Service records mutual acceptance.
+- Identity remains hidden until Reveal Service records automatic reveal completion at the immutable `revealAt` timestamp.
+- Chat surfaces may display the final reveal date/time or countdown only after Reveal Service finalizes the schedule.
 - Users may report harassment, identity disclosure, spam, or other Fair Play violations.
 - A restricted user may be prevented from sending messages.
 - Deleted or deactivated users cannot send new messages.
@@ -915,7 +918,7 @@ Chat DB must include:
 ## 9.10 Dependencies
 
 - Matching Service for match authorization and participant aliases.
-- Reveal Service for post-reveal status.
+- Reveal Service for reveal-duration collection, schedule status, and post-reveal status.
 - Fair Play Service for reports and restrictions.
 - Notification Service for unread message notifications.
 - API Gateway for WebSocket routing and JWT validation.
@@ -932,7 +935,7 @@ Chat DB must include:
 
 ## 9.12 Edge Cases
 
-- User sends message while reveal is accepted by both users.
+- User sends message while automatic reveal processing is completing.
 - User reconnects after sending a message but before receiving acknowledgement.
 - Both users report each other.
 - One user deactivates while the other is typing.
@@ -975,53 +978,93 @@ Primary Interfaces: REST via API Gateway
 
 ## 10.1 Purpose
 
-Reveal Service manages the mutual consent workflow that allows matched users to disclose identities after the configured anonymous period.
+Reveal Service manages the canonical V1 identity reveal lifecycle for matched users:
+
+- Initial reveal-duration preference collection at the beginning of anonymous chat.
+- Reveal schedule calculation after both participants submit valid selections.
+- Persistence of an immutable UTC `revealAt` timestamp.
+- Automatic identity reveal when the deadline is reached.
+
+Reveal Service does not manage reveal requests, reveal approvals, reveal rejections, or any later mutual-consent workflow in V1.
 
 ## 10.2 Business Goal
 
-Protect users from unwanted exposure while allowing successful anonymous conversations to transition into known interactions only when both participants consent.
+Balance user preference, fairness between both participants, predictable anonymity, and guaranteed eventual identity reveal. Each user can express how long they prefer to remain anonymous, the arithmetic mean creates a neutral system-calculated schedule, and both users receive the same automatic reveal outcome without later pressure or negotiation.
 
 ## 10.3 User Story
 
-As a matched user, I want to request identity reveal after a safe conversation period so that both of us can decide whether to disclose who we are.
+- As a matched user, I want to select 3, 5, or 7 days of anonymity when I first enter a new anonymous chat so that I can express my comfort level before conversation starts.
+- As a matched user, I want the system to calculate and show the final reveal schedule only after both of us have submitted choices so that neither participant can influence the other.
+- As a matched user, I want my identity to remain hidden until the reveal deadline so that anonymous chat privacy is preserved.
+- As a matched user, I want identity reveal to happen automatically at the deadline so that reveal is predictable and not dependent on later consent.
 
 ## 10.4 Functional Requirements
 
-- The service must determine when a match is eligible for reveal.
-- The configured reveal eligibility period must support 3, 5, or 7 days as product configuration.
-- A participant can initiate a reveal request only for an eligible active match.
-- The other participant can accept or decline the reveal request.
-- If both participants consent, the reveal is marked accepted and identities become visible.
-- If either participant declines, anonymity continues.
-- The service must expose reveal status to both participants.
-- The service must notify participants about reveal requests and outcomes.
-- The service must authorize User Service to return revealed profiles after mutual acceptance.
+- When Matching Service creates a mutual match, Chat Service must create or initialize an anonymous chat for the matched pair.
+- When a participant first enters the newly created anonymous chat, the client must show a mandatory modal asking: "How long would you like to remain anonymous?"
+- The allowed selections are exactly 3 days, 5 days, and 7 days.
+- Each participant must submit one selection independently before seeing the other participant's selection or any final schedule derived from it.
+- The service must reject attempts to retrieve the counterpart's individual selection.
+- The service must wait until both participants have submitted valid selections.
+- After the second valid selection is received, the service must calculate `revealPeriodDays = (userASelectionDays + userBSelectionDays) / 2`.
+- The service must support the complete calculation matrix:
+  - 3 and 3 -> reveal after 3 days.
+  - 3 and 5 -> reveal after 4 days.
+  - 3 and 7 -> reveal after 5 days.
+  - 5 and 5 -> reveal after 5 days.
+  - 5 and 7 -> reveal after 6 days.
+  - 7 and 7 -> reveal after 7 days.
+- Because allowed values are exactly 3, 5, and 7, the arithmetic mean is always a whole number.
+- The service must define `revealScheduleStartAt` as the UTC timestamp when both valid reveal-duration selections have been received and the schedule is finalized.
+- The service must calculate and persist `revealAt = revealScheduleStartAt + revealPeriodDays`.
+- The calculated `revealAt` timestamp must be immutable in V1.
+- After schedule finalization, neither participant can cancel the reveal, postpone the reveal, request early reveal, decline the reveal, change their original duration choice, or reset the reveal timer.
+- Reaching `revealAt` is sufficient to trigger automatic identity reveal.
+- At `revealAt`, the service must automatically transition the match reveal state so both participants can access each other's real identity according to the platform's reveal rules.
+- The service must expose reveal status and the final system-calculated reveal date/time or countdown after schedule finalization.
+- The service must notify both participants when the reveal schedule is finalized.
+- The service must notify both participants when identity reveal has occurred.
+- The service must authorize User Service to return revealed profiles only after automatic reveal completion.
+- The service must maintain an auditable history of participant selections, selection timestamps, schedule finalization timestamp, calculated reveal period, calculated `revealAt`, and automatic reveal completion timestamp.
 
 ## 10.5 Non-Functional Requirements
 
-- Consent state transitions must be transactional.
-- Reveal decisions must be auditable.
-- Reveal eligibility calculation must use server time in UTC.
-- The service must be idempotent for repeated accept or decline requests.
+- Reveal schedule finalization must be transactional so both selections, calculated period, `revealScheduleStartAt`, and `revealAt` are persisted consistently.
+- All reveal timing calculations must use server-side UTC time.
+- Repeated selection submissions and automatic reveal processing must be idempotent.
+- Reveal selection, schedule finalization, and automatic reveal completion must be auditable.
+- Automatic reveal workers must be reliable across retries, duplicate execution, and service restarts.
+- No identity information may become accessible before the exact `revealAt` timestamp.
+- The service must not trust client clocks for reveal timing or schedule calculation.
 - Reveal status reads should have P95 latency below 300 ms.
 
 ## 10.6 Business Rules
 
-- Reveal requires mutual consent.
-- Reveal cannot occur before configured eligibility period.
-- A reveal request must not disclose the requester's identity.
-- Declining reveal does not automatically end the match unless product policy changes.
-- Once both users accept reveal, the reveal state is irreversible in V1.
+- Choices are exactly 3, 5, or 7 days.
+- Both users choose independently.
+- Individual choices remain private from the other participant.
+- User A must not be able to see User B's selection before submitting their own choice.
+- User B must not be able to see User A's selection before submitting their own choice.
+- The arithmetic mean of both selections determines `revealPeriodDays`.
+- The reveal schedule starts when the second valid selection is received and the schedule is finalized.
+- `revealAt` is immutable after schedule finalization.
+- Reveal is automatic at `revealAt`.
+- There is no later consent, reveal request, approval, rejection, accept action, or decline action in V1.
+- Reveal cannot occur before the exact `revealAt` timestamp.
+- Once automatic reveal completes, the reveal state is irreversible in V1.
 - Reveal applies to a match pair, not globally to all contexts.
 
 ## 10.7 Validation Rules
 
 - Match ID is required and must be a valid UUID.
-- Requesting user must be a participant in the match.
+- Authenticated user must be a participant in the match.
 - Match must be active.
-- Match age must be greater than or equal to configured eligibility period.
-- Decision must be one of `ACCEPT` or `DECLINE`.
-- User cannot respond on behalf of the other participant.
+- Duration choice must be exactly 3, 5, or 7 days.
+- Each participant can submit only once per match.
+- Submitted choices cannot be changed.
+- Schedule finalization can occur only after both participant selections exist.
+- Automatic reveal can complete only when server-side UTC time is greater than or equal to `revealAt`.
+- User cannot submit a selection on behalf of the other participant.
 
 ## 10.8 API Requirements
 
@@ -1029,81 +1072,115 @@ Public endpoints:
 
 - `GET /api/v1/reveals/matches/{matchId}`
   - Authenticated.
-  - Returns reveal eligibility and current consent state.
-- `POST /api/v1/reveals/matches/{matchId}/request`
+  - Returns current reveal status, whether the authenticated participant has submitted their selection, whether the schedule is finalized, calculated `revealPeriodDays`, `revealScheduleStartAt`, `revealAt`, `revealedAt`, and display-safe countdown data when available.
+  - Must not return the other participant's individual selection.
+- `POST /api/v1/reveals/matches/{matchId}/duration-selection`
   - Authenticated.
-  - Creates reveal request from current user.
-- `POST /api/v1/reveals/matches/{matchId}/decision`
-  - Authenticated.
-  - Request: `decision`
-  - Response: reveal status.
+  - Request: `durationDays`.
+  - Response: participant submission status and, when both selections now exist, finalized reveal schedule.
+
+The public API must not include endpoints for request reveal, accept reveal, decline reveal, cancel reveal, postpone reveal, early reveal, or reveal reset.
 
 Internal endpoints:
 
 - `GET /internal/v1/reveals/matches/{matchId}/authorization`
-  - Used by User Service to authorize revealed profile access.
+  - Used by User Service to authorize revealed profile access after automatic reveal completion.
 - `GET /internal/v1/reveals/users/{requesterId}/can-view/{targetUserId}`
   - Optional direct authorization endpoint.
+- `POST /internal/v1/reveals/process-due`
+  - Optional worker endpoint or job trigger for idempotent automatic reveal processing.
 
 ## 10.9 Database Impact
 
-Reveal DB must include:
+Reveal DB must conceptually support:
 
-- `reveal_requests`: `id`, `match_id`, `requested_by_user_id`, `status`, `eligible_at`, `created_at`, `updated_at`
-- `reveal_consents`: `id`, `reveal_request_id`, `user_id`, `decision`, `decided_at`
-- `revealed_matches`: `id`, `match_id`, `user_a_id`, `user_b_id`, `revealed_at`
-- Unique index on active reveal request by match ID.
-- Unique index on consent by reveal request and user.
+- Match ID.
+- Participant A user ID and participant B user ID.
+- Participant A selection in days.
+- Participant B selection in days.
+- Participant A selection timestamp.
+- Participant B selection timestamp.
+- Schedule finalization timestamp.
+- Calculated reveal period in days.
+- Immutable `revealAt` timestamp.
+- Reveal status, such as awaiting selections, scheduled, revealed, or unavailable due to match lifecycle.
+- Automatic reveal completion timestamp `revealedAt`.
+- Audit metadata, including created/updated timestamps, source request IDs, correlation IDs, and idempotency keys where applicable.
+- Uniqueness constraints that prevent more than one selection per participant per match.
+- Indexing for due automatic reveals by status and `revealAt`.
+
+This section defines conceptual data requirements only. Physical schema names and normalization choices belong in detailed database design.
 
 ## 10.10 Dependencies
 
 - Matching Service for match status and participant validation.
-- User Service for revealed profile display.
-- Notification Service for reveal request and outcome notifications.
-- Chat Service for updating chat identity display after reveal if required.
+- Chat Service for anonymous chat initialization, mandatory duration-selection gating, and identity display updates after reveal.
+- User Service for revealed profile display and post-reveal authorization checks.
+- Notification Service for schedule-finalized and identity-revealed notifications.
 
 ## 10.11 Error Cases
 
 - Match not found.
 - User is not a match participant.
-- Match not eligible for reveal yet.
-- Reveal request already exists.
-- Invalid decision.
-- Reveal already accepted.
+- Match is inactive.
+- Invalid duration.
+- Duplicate selection submission.
+- Attempt to change a submitted selection.
+- Attempt to view the other participant's individual selection.
+- Automatic reveal attempted before `revealAt`.
+- Scheduler retry after transient failure.
+- Reveal already completed.
 - Notification scheduling failure.
 
 ## 10.12 Edge Cases
 
-- Both users initiate reveal at nearly the same time.
-- One user declines after the other accepts.
-- Reveal becomes eligible while users are actively chatting.
-- One user deactivates before responding.
-- Reveal accepted while profile service is temporarily unavailable.
+- One participant submits much later than the other; the schedule remains pending until the second valid selection is received.
+- One participant never submits; OPEN PRODUCT QUESTION: V1 does not yet define timeout, reminder, fallback, or match-expiration behavior for this case.
+- App is offline when reveal occurs; reveal state is authoritative server-side and the client must sync status on reconnect.
+- Automatic reveal worker retries after transient failure; processing must be idempotent.
+- Service restarts near `revealAt`; persisted due reveal records must be processed after recovery.
+- Duplicate scheduled execution occurs; only one reveal completion timestamp should be recorded.
+- User account is suspended or deleted before reveal; Reveal Service must coordinate with User Service and Fair Play policy before exposing identity.
+- Reveal occurs while users are actively chatting; Chat Service must refresh identity display only after Reveal Service confirms completion.
+- User Service is temporarily unavailable at reveal time; reveal state remains completed and profile access can succeed after User Service recovery.
 
 ## 10.13 Security Considerations
 
-- Do not disclose requester identity in reveal request notifications.
+- Hide individual duration selections from the other participant.
+- Use server-authoritative UTC time for all reveal calculations.
+- Prevent client clock manipulation by ignoring client-provided timestamps.
+- Prevent early profile access before the exact `revealAt` timestamp and automatic reveal completion.
 - Enforce participant authorization on every reveal operation.
-- Persist immutable consent timestamps.
-- User Service must verify reveal authorization before returning profile identity.
-- Avoid exposing declined reveal counts in ways that enable pressure or inference.
+- User Service must verify reveal authorization after automatic reveal before returning profile identity.
+- Persist audit logs for selections, schedule finalization, worker execution, and reveal completion.
+- Do not include identity data or individual selections in pre-reveal notifications, chat payloads, logs, or analytics events.
 
-## 10.14 Future Enhancements
+## 10.14 Acceptance Criteria
 
-- Configurable reveal periods per product experiment.
-- Reveal reminders.
+- Given User A selects 3 days and User B selects 3 days, when the second valid selection is received, then `revealPeriodDays` is 3 and `revealAt` is `revealScheduleStartAt + 3 days`.
+- Given User A selects 3 days and User B selects 5 days, when the second valid selection is received, then `revealPeriodDays` is 4 and `revealAt` is `revealScheduleStartAt + 4 days`.
+- Given User A selects 3 days and User B selects 7 days, when the second valid selection is received, then `revealPeriodDays` is 5 and `revealAt` is `revealScheduleStartAt + 5 days`.
+- Given User A selects 5 days and User B selects 5 days, when the second valid selection is received, then `revealPeriodDays` is 5 and `revealAt` is `revealScheduleStartAt + 5 days`.
+- Given User A selects 5 days and User B selects 7 days, when the second valid selection is received, then `revealPeriodDays` is 6 and `revealAt` is `revealScheduleStartAt + 6 days`.
+- Given User A selects 7 days and User B selects 7 days, when the second valid selection is received, then `revealPeriodDays` is 7 and `revealAt` is `revealScheduleStartAt + 7 days`.
+- Given only one participant has submitted a duration, when either participant retrieves reveal status, then the final schedule is not shown and the other participant's individual selection is not exposed.
+- Given both participants have submitted valid durations, when the schedule is finalized, then both participants are notified that the reveal schedule has been finalized.
+- Given the current server-side UTC time is before `revealAt`, when either participant requests the other user's profile, then User Service must not return identity data.
+- Given the current server-side UTC time is equal to or after `revealAt`, when automatic reveal processing runs, then Reveal Service marks the match revealed and records `revealedAt`.
+- Given automatic reveal completes, when profile authorization is checked, then User Service may return the counterpart's revealed profile according to product rules.
+- Given a participant repeats the same duration submission after a successful submission, when the request is processed, then the operation is idempotent and does not create a second selection or change the original timestamp.
+- Given a participant submits a different duration after a successful submission, when the request is processed, then the service rejects the change.
+- Given automatic reveal processing runs more than once for the same due match, when retries or duplicate executions occur, then only one reveal completion is persisted and notifications are not duplicated beyond idempotency policy.
+- Given a client submits local time data with the selection, when Reveal Service calculates the schedule, then client time is ignored and server-side UTC is used.
+
+## 10.15 Future Enhancements
+
+- Reminder policy for participants who have not submitted a duration selection.
+- Product-defined timeout or fallback policy when one participant never submits.
+- Configurable duration options only if approved by privacy and product review.
 - Post-reveal safety controls.
 - Partial reveal concepts, if approved by privacy review.
 - Reveal revocation policy for future legal/privacy requirements.
-
-## 10.15 Acceptance Criteria
-
-- Reveal cannot be requested before the configured eligibility period.
-- Reveal request does not expose identity.
-- Identity is revealed only after both participants accept.
-- Decline keeps identities anonymous.
-- User Service returns revealed profile only after Reveal Service authorization.
-- Concurrent reveal requests resolve to one consistent reveal state.
 
 ---
 
@@ -1215,7 +1292,7 @@ Fair Play DB must include:
 - Reported message was deleted or hidden.
 - A user is reported after deactivation.
 - The same incident is reported through chat and match surfaces.
-- Automated restriction is applied while reveal request is pending.
+- Automated restriction is applied while reveal schedule is pending or before automatic reveal completion.
 
 ## 11.13 Security Considerations
 
@@ -1260,7 +1337,7 @@ Drive timely user awareness without leaking identities, creating inference paths
 
 ## 12.3 User Story
 
-As a user, I want to receive notifications about important activity, such as anonymous matches, messages, and reveal requests, without exposing private information on my device.
+As a user, I want to receive notifications about important activity, such as anonymous matches, messages, reveal schedule finalization, and automatic reveal completion, without exposing private information on my device.
 
 ## 12.4 Functional Requirements
 
@@ -1272,7 +1349,7 @@ As a user, I want to receive notifications about important activity, such as ano
 - The service must record delivery attempts and statuses.
 - The service must retry transient delivery failures.
 - The service must expose internal APIs for other services to schedule notifications.
-- The service must support notification types for match created, chat message, reveal request, reveal outcome, Fair Play warning, and system notices.
+- The service must support notification types for match created, chat message, reveal schedule finalized, identity revealed, Fair Play warning, and system notices.
 
 ## 12.5 Non-Functional Requirements
 
@@ -1285,7 +1362,7 @@ As a user, I want to receive notifications about important activity, such as ano
 ## 12.6 Business Rules
 
 - Match notifications must be delayed by a randomized interval.
-- Notifications must not reveal identity before mutual reveal.
+- Notifications must not reveal identity before automatic reveal completion.
 - Users may opt out of non-critical notifications where product allows.
 - Critical safety and account notifications may bypass marketing preferences.
 - Notification Service does not decide business state; source services own business decisions.
@@ -1361,7 +1438,7 @@ Notification DB must include:
 - User logs in on multiple devices.
 - Device token rotates.
 - Match notification is due after match becomes inactive.
-- Reveal notification is due after reveal state has already changed.
+- Reveal schedule or identity-revealed notification is due after reveal state has already changed.
 - Push provider accepts request but device does not display it.
 
 ## 12.13 Security Considerations
@@ -1425,11 +1502,12 @@ Notification DB must include:
 2. Chat Service authorizes participant access.
 3. Users exchange anonymous messages.
 4. Either user reports violations through Fair Play.
-5. After configured reveal period, user requests reveal.
-6. Reveal Service records request without exposing identity.
-7. Other user accepts or declines.
-8. If both accept, Reveal Service records revealed match.
-9. User Service exposes revealed profile through authorized APIs.
+5. Each participant selects 3, 5, or 7 days from the mandatory reveal-duration modal before normal chat use.
+6. Reveal Service keeps individual selections private and waits for both valid submissions.
+7. After the second selection, Reveal Service calculates the arithmetic mean, finalizes `revealScheduleStartAt`, and persists immutable `revealAt`.
+8. Users exchange anonymous messages until the exact `revealAt` timestamp.
+9. At `revealAt`, Reveal Service automatically records revealed match state.
+10. User Service exposes revealed profile through authorized APIs.
 
 ## 13.4 Fair Play Enforcement
 
@@ -1469,7 +1547,7 @@ Notification DB must include:
 - Services never return entities directly.
 - Private List invariants are covered by unit tests.
 - Matching mutual inclusion logic is covered by deterministic unit tests.
-- Reveal mutual consent state machine is covered by unit tests.
+- Reveal duration-selection, schedule calculation, and automatic reveal lifecycle are covered by unit tests.
 - Chat authorization and anonymity are covered by integration tests.
 - Social Graph import normalization is covered by unit tests.
 - Fair Play restriction enforcement is covered by service tests.

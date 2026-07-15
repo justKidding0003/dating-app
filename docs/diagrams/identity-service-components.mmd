@@ -1,0 +1,43 @@
+classDiagram
+    class AuthController
+    class AuthenticationService
+    class OtpChallengeService
+    class OtpChallengePersistenceService
+    class OtpGenerator
+    class OtpProtector
+    class OtpDeliveryProvider {
+        <<interface>>
+        +deliver(normalizedDestination, otp)
+    }
+    class LocalDevelopmentOtpDeliveryProvider
+    class IdentityResolutionService
+    class IdentityRepository {
+        <<interface>>
+    }
+    class TokenOrchestrationService
+    class AccessTokenService
+    class RefreshSessionService
+    class PhoneNumberNormalizer
+    class PhoneLookupHasher
+    class RateLimiter {
+        <<interface>>
+    }
+    class InMemoryRateLimiter
+
+    AuthController --> AuthenticationService
+    AuthenticationService --> OtpChallengeService
+    AuthenticationService --> IdentityResolutionService
+    AuthenticationService --> TokenOrchestrationService
+    AuthenticationService --> RefreshSessionService
+    OtpChallengeService --> PhoneNumberNormalizer
+    OtpChallengeService --> PhoneLookupHasher
+    OtpChallengeService --> OtpGenerator
+    OtpChallengeService --> OtpProtector
+    OtpChallengeService --> OtpChallengePersistenceService
+    OtpChallengeService --> OtpDeliveryProvider
+    OtpChallengeService --> RateLimiter
+    LocalDevelopmentOtpDeliveryProvider ..|> OtpDeliveryProvider
+    InMemoryRateLimiter ..|> RateLimiter
+    IdentityResolutionService --> IdentityRepository
+    TokenOrchestrationService --> AccessTokenService
+    TokenOrchestrationService --> RefreshSessionService
