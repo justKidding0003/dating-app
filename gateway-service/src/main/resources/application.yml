@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: gateway-service
+  lifecycle:
+    timeout-per-shutdown-phase: ${GATEWAY_SHUTDOWN_TIMEOUT:30s}
+
+server:
+  port: ${GATEWAY_SERVICE_PORT:8081}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    phase: phase-2
+
+logging:
+  level:
+    root: ${GATEWAY_LOG_LEVEL_ROOT:INFO}
+    com.kshiteesh.datingapp.gateway: ${GATEWAY_LOG_LEVEL_APP:INFO}
+    org.springframework.cloud.gateway: ${GATEWAY_LOG_LEVEL_SPRING_CLOUD_GATEWAY:INFO}
+  pattern:
+    level: "%5p [${spring.application.name:gateway-service},%X{traceId:-},%X{spanId:-}]"
+
+gateway:
+  routes:
+    identity-service-uri: ${IDENTITY_SERVICE_URI:http://localhost:8080}
+  security:
+    jwt:
+      issuer: ${GATEWAY_JWT_ISSUER:identity-service}
+      audience: ${GATEWAY_JWT_AUDIENCE:dating-app}
+      public-key-pem: ${GATEWAY_JWT_PUBLIC_KEY_PEM:}
