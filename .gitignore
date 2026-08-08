@@ -19,6 +19,11 @@ build/
 
 # Environment
 .env
+.env.local
+**/.env.local
+*.pem
+*.p12
+*.pfx
 
 # OS
 .DS_Store

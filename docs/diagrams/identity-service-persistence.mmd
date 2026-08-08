@@ -1,0 +1,42 @@
+erDiagram
+    IDENTITY {
+        uuid identity_id PK
+        string phone_number_hash UK
+        string status
+        instant created_at
+        instant updated_at
+    }
+
+    OTP_CHALLENGE {
+        uuid challenge_id PK
+        uuid identity_id
+        string phone_number_hash
+        string otp_hmac
+        string status
+        instant expires_at
+        instant resend_available_at
+        int attempt_count
+        int max_attempts
+        instant created_at
+        instant verified_at
+        instant consumed_at
+    }
+
+    REFRESH_SESSION {
+        uuid session_id PK
+        uuid identity_id
+        string refresh_token_hash
+        string previous_token_hash
+        string status
+        instant expires_at
+        instant revoked_at
+        instant rotated_at
+        instant reuse_detected_at
+        string device_id
+        string device_name
+        instant created_at
+        instant updated_at
+    }
+
+    IDENTITY ||--o{ REFRESH_SESSION : owns
+    IDENTITY ||--o{ OTP_CHALLENGE : authenticates_with
